@@ -3,7 +3,8 @@ import subprocess
 import tempfile
 import shutil
 import json
-import telegram
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from threading import Thread
 
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
@@ -13,9 +14,9 @@ from deep_translator import GoogleTranslator
 
 
 # ======= НАСТРОЙКИ =======
-TOKEN = "8390458001:AAFcG4B-CV8hJ9TUF1xI5cr9SL_FMsDv1Dc"  # ← Замени на свой!
+TOKEN = os.getenv("TOKEN")  # ← Берём из переменных среды
 MAX_DURATION = 600  # Макс. длительность видео: 10 минут (в секундах)
-MAX_FILESIZE = 100 * 1024 * 1024  # 100 МБ
+MAX_FILESIZE = 20 * 1024 * 1024  # Уменьшили до 20 МБ (лимит Telegram)
 # =======================
 
 
@@ -58,11 +59,9 @@ def run_whisper(audio_path):
     json_path = audio_path.replace(".wav", ".json")
     print(f"📄 Ожидаемый JSON: {json_path}")
 
-    # Проверим, существует ли аудио
     if not os.path.exists(audio_path):
         raise Exception("❌ Аудиофайл не найден для Whisper")
 
-    # Проверка прав на запись
     print("📁 Проверка прав: можно ли записать в папку?")
     test_file = os.path.join(os.path.dirname(audio_path), "test_write.txt")
     try:
@@ -74,7 +73,6 @@ def run_whisper(audio_path):
         print(f"❌ Нет прав на запись: {e}")
         raise
 
-    # Запускаем Whisper
     result = subprocess.run([
         "whisper", audio_path,
         "--model", "tiny",
@@ -196,7 +194,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 actual_file = await file.get_file()
                 await actual_file.download_to_drive(file_path)
-            except telegram.error.BadRequest as e:
+            except Exception as e:
                 if "File is too big" in str(e):
                     await update.message.reply_text(
                         f"❌ Не удалось загрузить видео: файл слишком большой.\n"
@@ -207,11 +205,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await update.message.reply_text(f"❌ Ошибка загрузки: {str(e)}")
                     return
-            except Exception as e:
-                await update.message.reply_text(f"❌ Ошибка при получении файла: {str(e)}")
-                return
 
-    await _process_video(update, context, file_path, temp_dir)
+            await _process_video(update, context, file_path, temp_dir)  # ✅ ВНУТРИ with!
+
 
 async def _process_video(update: Update, context: ContextTypes.DEFAULT_TYPE, video_path: str, temp_dir: str):
     context.user_data['cancel_requested'] = False
@@ -333,6 +329,22 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🛑 Отмена... Подождите, идёт завершение текущего шага.")
 
 
+# ============ ВЕБ-СЕРВЕР ДЛЯ RENDER ============
+def run_web_server():
+    """Мини-сервер для здоровья (чтобы Render не убивал контейнер)"""
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b"OK - Bot is running")
+
+    port = int(os.environ.get("PORT", 8000))
+    server = HTTPServer(('', port), HealthHandler)
+    print(f"🌐 Health check server running on port {port}")
+    server.serve_forever()
+
+
 # ============ ЗАПУСК БОТА ============
 if __name__ == "__main__":
     app = Application.builder() \
@@ -349,6 +361,9 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.VIDEO | filters.Document.ALL, handle_message))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
 
-    print("🤖 Бот запущен. Готов к работе!")
+    # Запускаем веб-сервер в фоне
+    from threading import Thread
+    Thread(target=run_web_server, daemon=True).start()
 
+    print("🤖 Бот запущен. Готов к работе!")
     app.run_polling()
