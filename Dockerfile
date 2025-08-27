@@ -1,4 +1,3 @@
-# Используем образ с ffmpeg и Python
 FROM python:3.10-slim
 
 # Установка ffmpeg
@@ -7,10 +6,11 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Обновляем pip
+RUN pip install --upgrade pip
+
 # Копируем и устанавливаем зависимости
 COPY requirements.txt .
-RUN pip install --upgrade pip
-RUN python-telegram-bot --upgrade
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем скрипт
