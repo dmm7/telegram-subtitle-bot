@@ -135,7 +135,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! 👋 Я — бот для добавления субтитров.\n"
         "Отправь мне:\n"
-        "1. Видео (до 100 МБ) или\n"
+        "1. Видео (до 20 МБ) или\n"
         "2. Ссылку на YouTube / Rutube\n\n"
         "Я распознаю речь, переведу на русский и верну видео со встроенными субтитрами! 🎞️🇷🇺",
         reply_markup=reply_markup
@@ -350,4 +350,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
 
     print("🤖 Бот запущен. Готов к работе!")
+
     app.run_polling()
