@@ -339,7 +339,7 @@ def run_web_server():
             self.end_headers()
             self.wfile.write(b"OK - Bot is running")
 
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(('', port), HealthHandler)
     print(f"🌐 Health check server running on port {port}")
     server.serve_forever()
@@ -367,3 +367,4 @@ if __name__ == "__main__":
 
     print("🤖 Бот запущен. Готов к работе!")
     app.run_polling()
+
